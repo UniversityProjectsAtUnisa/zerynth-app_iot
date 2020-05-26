@@ -1,4 +1,4 @@
 ClapToLightUp
 =============
 
-[Project description goes here]
+Iot zerynth app for clapToLightUp iot Project.
