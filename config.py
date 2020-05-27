@@ -22,3 +22,11 @@ class ModeHandler:
         self.muted = not (self.en and self.muted) 
         digitalWrite(self.enabledLed, HIGH if self.en else LOW)
         digitalWrite(self.mutedLed, HIGH if self.muted else LOW)
+        
+    def set(self, mqttPayload):
+        print(mqttPayload)
+        e, m = [int(x) for x in mqttPayload.split(' ')]
+        self.en = True if e > 0 else False
+        self.muted = True if m > 0 else False
+        digitalWrite(self.enabledLed, HIGH if self.en else LOW)
+        digitalWrite(self.mutedLed, HIGH if self.muted else LOW)
