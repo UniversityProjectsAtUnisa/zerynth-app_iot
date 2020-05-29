@@ -5,38 +5,38 @@ import config as cfg
 # Definizione dell'ascoltatore
 class Listener:
     # Configurato tramite parametri nel file config
-    def __init__(self, soundSensorPin):
+    def __init__(self, soundSensorPin, potentiometerPin):
         self.sndSnsr = soundSensorPin
+        self.potentiometer = potentiometerPin
+        
+    def readSound(self):
+        sound = adc.read(self.sndSnsr)
+        multiplier = adc.read(self.potentiometer) / 1500.0 # Al posto di 4095.0 per usare il potenziometro in posizione centrale
+        return sound * multiplier
         
     # Metodo di singolo ascolto
     def listen(self):
-        sensorValue = adc.read(self.sndSnsr)
-    
-        if sensorValue < cfg.THRESHOLD:
-            return False
-            
-        # La prima volta supera il THRESHOLD
-        print("Primo")
-        t = timers.timer()
-        t.start()
-        sleep(cfg.DEBOUNCE)
+        step = 0
         
+        if step == 0:
+            sensorValue = self.readSound()
+            if sensorValue > cfg.HIGH_THRESHOLD:
+                step = 1
         
-        # Poi non supera più il THRESHOLD per un tempo INTERVAL
-        while(t.get() < cfg.INTERVAL):
-            sensorValue = adc.read(self.sndSnsr)
-            if sensorValue > cfg.THRESHOLD:
-                print("Troppo presto")
-                return False
-            sleep(cfg.SCAN_PERIOD)
-            
-        t.reset()
-        # Poi supera il THRESHOLD in un tempo INTERVAL
-        while(t.get() < cfg.INTERVAL):
-            sensorValue = adc.read(self.sndSnsr)
-            if sensorValue > cfg.THRESHOLD:
-                return True
-            sleep(cfg.SCAN_PERIOD)
+        if step == 1:
+            print("PRIMO")
+            for _ in range(cfg.CYCLES_STEP_1):
+                sleep(cfg.SLEEP_STEP_1)
+                sensorValue = self.readSound()
+                if sensorValue < cfg.LOW_THRESHOLD:
+                    step = 2
         
-        print("Troppo tardi")
+        if step == 2:
+            for _ in range(cfg.CYCLES_STEP_2):
+                sleep(cfg.SLEEP_STEP_2)
+                sensorValue = self.readSound()
+                if sensorValue > cfg.HIGH_THRESHOLD:
+                    sleep(cfg.DEBOUNCE)
+                    return True
+                    
         return False

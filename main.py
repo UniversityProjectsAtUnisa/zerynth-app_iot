@@ -4,23 +4,21 @@
 import streams
 import checkDoubleClap as cdc
 import switcher as swc
+import light_driver as ld
 import config as cfg
 import timers
 
-from mqtt import mqtt
-from espressif.esp32net import esp32wifi as wifi_driver
-from wireless import wifi
-wifi_driver.auto_init()
+import internet
 
 # Apertura stream seriale
 streams.serial()
 
 # Imposto il sensore di suono per la lettura analogica
-sndSnsrPin = A4
+sndSnsrPin = A0
 pinMode(sndSnsrPin, INPUT_ANALOG)
 
 # Imposto il led principale per la scrittura digitale
-mainLedPin = D23
+mainLedPin = D23.PWM
 pinMode(mainLedPin, OUTPUT)
 
 # Imposto i led di stato
@@ -37,15 +35,19 @@ pinMode(modeButtonPin, INPUT_PULLUP)
 modeHandler = cfg.ModeHandler(enabledLedPin, mutedLedPin)
 
 # Imposto il buzzer per funzionare in pwm
-buzzerPin = D18.PWM
+buzzerPin = D12.PWM
 pinMode(buzzerPin, OUTPUT)
 
 # Imposto il button per l'accensione manuale del led
-lightButtonPin = D12
+lightButtonPin = D14
 pinMode(lightButtonPin,INPUT_PULLDOWN)
 
+# Imposto un potenziometro per la regolazione della sensibilità del sistema
+potentiometerPin = A4
+pinMode(potentiometerPin,INPUT_ANALOG)
+
 # Inizializzo un Listener
-listener = cdc.Listener(sndSnsrPin)
+listener = cdc.Listener(sndSnsrPin, potentiometerPin)
 
 # Inizializzo uno Switcher
 switcher = swc.Switcher(buzzerPin, mainLedPin, modeHandler)
@@ -57,55 +59,68 @@ onPinFall(modeButtonPin, modeHandler.changeMode)
 # Alla pressione del bottone cambio lo stato del led principale
 onPinFall(lightButtonPin, switcher.switch, "Dal Bottone")
 
+# Mi collego al wifi
+internet.connect()
 
-print("Establishing Link...")
-try:
-    wifi.link("Della Rocca",wifi.WIFI_WPA2,"xDrxQjn7b7")
-except Exception as e:
-    print("ooops, something wrong while linking :(", e)
-    while True:
-        sleep(1000)
 
+# Inizializzo il lightSensor
+lightSensor = ld.LightSensor(I2C0)
+
+def measure_light():
+    brighnessPercentage = lightSensor.measure_high_res()
+    publish_light(brighnessPercentage)
+    switcher.setDutyCycle(brighnessPercentage)
+    
+
+def publish_light(brighnessPercentage):
+    message = str(brighnessPercentage)
+    try:
+        client.publish("current/light", message)
+        print(message)
+    except Exception as e:
+        print('publish_leds_state failed for message: ', message)
 
 def publish_leds_state():
-    client.publish("current/leds", 
-    ('1 ' if switcher.ledState else '0 ') + 
-    ('1 ' if modeHandler.en    else '0 ') +
-    ('1'  if modeHandler.muted else '0' )
-    )
+    message = ""
+    message += ('1 ' if switcher.ledState else '0 ') 
+    message += ('1 ' if modeHandler.en    else '0 ')
+    message += ('1'  if modeHandler.muted else '0' )
+        
+    try:
+        client.publish("current/leds", message, retain=True)
+        print(message)
+    except Exception as e:
+        print('publish_leds_state failed for message: ', message)
+    
+    
+modeHandler.on_change(publish_leds_state)
+switcher.on_change(publish_leds_state)
     
     
 # define MQTT callbacks
 def on_message(client, data):
     message = data['message']
-    print('message.topic')
+    print(message.topic)
     if message.topic == 'new/luce':
         switcher.set(message.payload)
     elif message.topic == 'new/mode':
         modeHandler.set(message.payload)
     elif message.topic == 'new/change':
         modeHandler.changeMode()
-    publish_leds_state()
     
     
-
 try:
-    client = mqtt.Client("zerynth-mqtt",True)
-    for retry in range(10):
-        try:
-            client.connect("test.mosquitto.org", 60)
-            break
-        except Exception as e:
-            print("connecting...")
-    print("connected.")
+    client = internet.Client("zerynth-mqtt-marco741")
+    
     # subscribe to channels
     client.subscribe([["new/+", 1]])
     
     # start the mqtt loop
     client.loop(on_message)
     
-    t=timers.timer()
-    t.interval(5000, publish_leds_state)
+    publish_leds_state()
+    t = timers.timer()
+    t.interval(1500, measure_light)
     
     
     
@@ -120,3 +135,6 @@ try:
         sleep(cfg.SCAN_PERIOD)
 except Exception as e:
     print(e)
+    
+    
+    
