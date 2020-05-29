@@ -11,7 +11,7 @@ SLEEP_STEP_2 = 1
 DEBOUNCE = 100 * SCAN_PERIOD
 INTERVAL = 250 * SCAN_PERIOD
 MAX_LUX_DETECTED = 50000
-PWM_PERIOD = 10
+PWM_PERIOD = 10000
 
 class ModeHandler:
     def __init__(self, enabledLedPin, mutedLedPin):

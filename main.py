@@ -3,6 +3,7 @@
 
 import streams
 import checkDoubleClap as cdc
+import buzzerFeedback as bfb
 import switcher as swc
 import light_driver as ld
 import config as cfg
@@ -18,7 +19,7 @@ sndSnsrPin = A0
 pinMode(sndSnsrPin, INPUT_ANALOG)
 
 # Imposto il led principale per la scrittura digitale
-mainLedPin = D23.PWM
+mainLedPin = D15.PWM
 pinMode(mainLedPin, OUTPUT)
 
 # Imposto i led di stato
@@ -35,12 +36,19 @@ pinMode(modeButtonPin, INPUT_PULLUP)
 modeHandler = cfg.ModeHandler(enabledLedPin, mutedLedPin)
 
 # Imposto il buzzer per funzionare in pwm
-buzzerPin = D12.PWM
+buzzerPin = D13.PWM
 pinMode(buzzerPin, OUTPUT)
+
+# Inizializzo il buzzer
+buzzer = bfb.Buzzer(buzzerPin, modeHandler)
 
 # Imposto il button per l'accensione manuale del led
 lightButtonPin = D14
 pinMode(lightButtonPin,INPUT_PULLDOWN)
+
+# Imposto il button per la canzone
+musicButtonPin = D27
+pinMode(musicButtonPin, INPUT_PULLDOWN)
 
 # Imposto un potenziometro per la regolazione della sensibilità del sistema
 potentiometerPin = A4
@@ -50,14 +58,7 @@ pinMode(potentiometerPin,INPUT_ANALOG)
 listener = cdc.Listener(sndSnsrPin, potentiometerPin)
 
 # Inizializzo uno Switcher
-switcher = swc.Switcher(buzzerPin, mainLedPin, modeHandler)
-
-
-# Alla pressione del bottone integrato cambio la modalità
-onPinFall(modeButtonPin, modeHandler.changeMode)
-
-# Alla pressione del bottone cambio lo stato del led principale
-onPinFall(lightButtonPin, switcher.switch, "Dal Bottone")
+switcher = swc.Switcher(mainLedPin, buzzer)
 
 # Mi collego al wifi
 internet.connect()
@@ -73,6 +74,8 @@ def measure_light():
     
 
 def publish_light(brighnessPercentage):
+    if not client.connected():
+        return
     message = str(brighnessPercentage)
     try:
         client.publish("current/light", message)
@@ -81,6 +84,8 @@ def publish_light(brighnessPercentage):
         print('publish_leds_state failed for message: ', message)
 
 def publish_leds_state():
+    if not client.connected():
+        return
     message = ""
     message += ('1 ' if switcher.ledState else '0 ') 
     message += ('1 ' if modeHandler.en    else '0 ')
@@ -93,32 +98,40 @@ def publish_leds_state():
         print('publish_leds_state failed for message: ', message)
     
     
+# define MQTT callbacks
+def on_luce_message(mqtt_client, payload, topic):
+    switcher.set(payload)
+    
+def on_mode_message(mqtt_client, payload, topic):
+    modeHandler.set(payload)
+    
+def on_change_message(mqtt_client, payload, topic):
+    modeHandler.changeMode()
+    
+
 modeHandler.on_change(publish_leds_state)
 switcher.on_change(publish_leds_state)
-    
-    
-# define MQTT callbacks
-def on_message(client, data):
-    message = data['message']
-    print(message.topic)
-    if message.topic == 'new/luce':
-        switcher.set(message.payload)
-    elif message.topic == 'new/mode':
-        modeHandler.set(message.payload)
-    elif message.topic == 'new/change':
-        modeHandler.changeMode()
-    
+
+# Alla pressione del bottone integrato cambio la modalità
+onPinFall(modeButtonPin, modeHandler.changeMode)
+
+# Alla pressione del bottone della luce cambio lo stato del led principale
+onPinFall(lightButtonPin, switcher.switch, "Dal Bottone")
+
+# Alla pressione del bottone della musica avvio o stoppo la riproduzione
+onPinFall(musicButtonPin, bfb.startStop, buzzer)
+
     
 try:
     client = internet.Client("zerynth-mqtt-marco741")
     
     # subscribe to channels
-    client.subscribe([["new/+", 1]])
-    
-    # start the mqtt loop
-    client.loop(on_message)
-    
+    client.subscribe("new/luce", on_luce_message, 1)
+    client.subscribe("new/mode", on_mode_message, 1)
+    client.subscribe("new/change", on_change_message, 1)
     publish_leds_state()
+    
+    
     t = timers.timer()
     t.interval(1500, measure_light)
     

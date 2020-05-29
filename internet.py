@@ -1,4 +1,4 @@
-from mqtt import mqtt
+from lwmqtt import mqtt
 
 SSID = "Della Rocca"
 PASSWORD = "xDrxQjn7b7"
@@ -16,17 +16,22 @@ def connect():
         print("ooops, something wrong while linking :(", e)
         while True:
             sleep(1000)
-            
-def breconnect():
-    print("Tentativo di riconnessione in corso...")
+    
             
 class Client(mqtt.Client):
+    def breconnect(self):
+        print("Tentativo di riconnessione in corso...")
+
+    def aconnect(self):
+        self.publish("current/connected", "True", qos=1, retain=True)
+        
     def __init__(self, client_id, clean_session=True):
         mqtt.Client.__init__(self, client_id, clean_session)
+        self.set_will("current/connected", "False", qos=1, retain=True)
         
         for retry in range(10):
             try:
-                self.connect("test.mosquitto.org", 60, breconnect_cb=breconnect)
+                self.connect("test.mosquitto.org", 10, breconnect_cb=self.breconnect, aconnect_cb=self.aconnect)
                 break
             except Exception as e:
                 print("connecting...")
