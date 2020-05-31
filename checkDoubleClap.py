@@ -4,7 +4,6 @@ import config as cfg
 
 # Definizione dell'ascoltatore
 class Listener:
-    # Configurato tramite parametri nel file config
     def __init__(self, soundSensorPin, potentiometerPin):
         self.sndSnsr = soundSensorPin
         self.potentiometer = potentiometerPin

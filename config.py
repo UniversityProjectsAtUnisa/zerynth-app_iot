@@ -33,8 +33,9 @@ class ModeHandler:
         if self.dnd:
             self.setEnabled(not self.en)
         else:
+            lastEn = self.en
             self.setEnabled(self.muted)
-            self.setMuted(not self.enabled)
+            self.setMuted(not lastEn)
         self.publish_leds_state()
         
     def set(self, mqttPayload):
