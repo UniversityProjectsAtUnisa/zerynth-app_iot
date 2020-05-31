@@ -8,7 +8,6 @@ import switcher as swc
 import light_driver as ld
 import config as cfg
 import timers
-
 import internet
 
 # Apertura stream seriale
@@ -19,7 +18,7 @@ sndSnsrPin = A0
 pinMode(sndSnsrPin, INPUT_ANALOG)
 
 # Imposto il led principale per la scrittura digitale
-mainLedPin = D15.PWM
+mainLedPin = D15
 pinMode(mainLedPin, OUTPUT)
 
 # Imposto i led di stato
@@ -67,10 +66,20 @@ internet.connect()
 # Inizializzo il lightSensor
 lightSensor = ld.LightSensor(I2C0)
 
-def measure_light():
+
+def measureLight():
     brighnessPercentage = lightSensor.measure_high_res()
     publish_light(brighnessPercentage)
-    switcher.setDutyCycle(brighnessPercentage)
+
+def publish_dnd():
+    if not client.connected():
+        return
+    message = str(modeHandler.dnd)
+    try:
+        client.publish("current/dnd", message, qos=1, retain=True)
+        print("Published dnd state:", message)
+    except Exception as e:
+        print('publish_light failed for message: ', message)
     
 
 def publish_light(brighnessPercentage):
@@ -79,9 +88,9 @@ def publish_light(brighnessPercentage):
     message = str(brighnessPercentage)
     try:
         client.publish("current/light", message)
-        print(message)
+        print("Published detected light:", message)
     except Exception as e:
-        print('publish_leds_state failed for message: ', message)
+        print('publish_light failed for message: ', message)
 
 def publish_leds_state():
     if not client.connected():
@@ -93,7 +102,7 @@ def publish_leds_state():
         
     try:
         client.publish("current/leds", message, retain=True)
-        print(message)
+        print("Published Led State:", message)
     except Exception as e:
         print('publish_leds_state failed for message: ', message)
     
@@ -107,6 +116,10 @@ def on_mode_message(mqtt_client, payload, topic):
     
 def on_change_message(mqtt_client, payload, topic):
     modeHandler.changeMode()
+    
+def on_DND_message(mqtt_client, payload, topic):
+    modeHandler.setDND(payload)
+    publish_dnd()
     
 
 modeHandler.on_change(publish_leds_state)
@@ -129,11 +142,12 @@ try:
     client.subscribe("new/luce", on_luce_message, 1)
     client.subscribe("new/mode", on_mode_message, 1)
     client.subscribe("new/change", on_change_message, 1)
+    client.subscribe("new/dnd", on_DND_message, 1)
     publish_leds_state()
     
     
     t = timers.timer()
-    t.interval(1500, measure_light)
+    t.interval(1500, measureLight)
     
     
     
@@ -148,6 +162,3 @@ try:
         sleep(cfg.SCAN_PERIOD)
 except Exception as e:
     print(e)
-    
-    
-    

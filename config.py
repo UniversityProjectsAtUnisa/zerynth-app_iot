@@ -23,23 +23,35 @@ class ModeHandler:
         self.muted = False
         self.mutedLed = mutedLedPin
         digitalWrite(self.mutedLed, LOW)
+        self.dnd = False
         
     def on_change(self, callback):
         self.publish_leds_state = callback
-
         
     def changeMode(self):
         print("Premuto bottone onBoard")
-        self.en = not (self.en and self.muted)
-        self.muted = not (self.en and self.muted) 
-        digitalWrite(self.enabledLed, HIGH if self.en else LOW)
-        digitalWrite(self.mutedLed, HIGH if self.muted else LOW)
+        if self.dnd:
+            self.setEnabled(not self.en)
+        else:
+            self.setEnabled(self.muted)
+            self.setMuted(not self.enabled)
         self.publish_leds_state()
         
     def set(self, mqttPayload):
         e, m = [int(x) for x in mqttPayload.split(' ')]
-        self.en = True if e > 0 else False
-        self.muted = True if m > 0 else False
+        self.setEnabled(True if e > 0 else False)
+        self.setMuted(True if m > 0 else False)
+        self.publish_leds_state()
+        
+    def setEnabled(self, b):
+        self.en = b
         digitalWrite(self.enabledLed, HIGH if self.en else LOW)
-        digitalWrite(self.mutedLed, HIGH if self.muted else LOW)
+        
+    def setMuted(self, b):
+        self.muted = b or self.dnd
+        digitalWrite(self.mutedLed, HIGH if self.muted or self.dnd else LOW)
+        
+    def setDND(self, mqttPayload):
+        self.dnd = True if mqttPayload == 'True' else False
+        self.setMuted(self.muted)
         self.publish_leds_state()
