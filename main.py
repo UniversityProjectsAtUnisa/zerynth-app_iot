@@ -72,39 +72,36 @@ def measureLight():
     publish_light(brighnessPercentage)
 
 def publish_dnd():
-    if not client.connected():
-        return
-    message = str(modeHandler.dnd)
-    try:
-        client.publish("current/dnd", message, qos=1, retain=True)
-        print("Published dnd state:", message)
-    except Exception as e:
-        print('publish_light failed for message: ', message)
+    if client.connected():
+        message = str(modeHandler.dnd)
+        try:
+            client.publish("current/dnd", message, qos=1, retain=True)
+            print("Published dnd state:", message)
+        except Exception as e:
+            print('publish_light failed for message: ', message, e)
     
 
 def publish_light(brighnessPercentage):
-    if not client.connected():
-        return
-    message = str(brighnessPercentage)
-    try:
-        client.publish("current/light", message)
-        print("Published detected light:", message)
-    except Exception as e:
-        print('publish_light failed for message: ', message)
+    if client.connected():
+        message = str(brighnessPercentage)
+        try:
+            client.publish("current/light", message)
+            print("Published detected light:", message)
+        except Exception as e:
+            print('publish_light failed for message: ', message, e)
 
 def publish_leds_state():
-    if not client.connected():
-        return
-    message = ""
-    message += ('1 ' if switcher.ledState else '0 ') 
-    message += ('1 ' if modeHandler.en    else '0 ')
-    message += ('1'  if modeHandler.muted else '0' )
-        
-    try:
-        client.publish("current/leds", message, retain=True)
-        print("Published Led State:", message)
-    except Exception as e:
-        print('publish_leds_state failed for message: ', message)
+    if client.connected():
+        message = ""
+        message += ('1 ' if switcher.ledState else '0 ') 
+        message += ('1 ' if modeHandler.en    else '0 ')
+        message += ('1'  if modeHandler.muted else '0' )
+            
+        try:
+            client.publish("current/leds", message, retain=True)
+            print("Published Led State:", message)
+        except Exception as e:
+            print('publish_leds_state failed for message: ', message, e)
     
     
 # define MQTT callbacks
@@ -129,35 +126,38 @@ switcher.on_change(publish_leds_state)
 onPinFall(modeButtonPin, modeHandler.changeMode)
 
 # Alla pressione del bottone della luce cambio lo stato del led principale
-onPinFall(lightButtonPin, switcher.switch, "Dal Bottone")
+onPinFall(lightButtonPin, switcher.switch, "From Button")
 
 # Alla pressione del bottone della musica avvio o stoppo la riproduzione
 onPinFall(musicButtonPin, bfb.startStop, buzzer)
 
+
+# Inizializzo il timer per le misurazioni del lightSensor
+t = timers.timer()
+t.interval(1500, measureLight)
+
+# Inizializzo il client MQTT
+client = internet.Client("zerynth-mqtt-marco741")
     
-try:
-    client = internet.Client("zerynth-mqtt-marco741")
-    
-    # subscribe to channels
+# subscribe to channels
+def aconnect_cb():
+    print("connected.")
+    global client
     client.subscribe("new/luce", on_luce_message, 1)
     client.subscribe("new/mode", on_mode_message, 1)
     client.subscribe("new/change", on_change_message, 1)
     client.subscribe("new/dnd", on_DND_message, 1)
+    client.publish("current/connected", "True", qos=1, retain=True)
     publish_leds_state()
-    
-    
-    t = timers.timer()
-    t.interval(1500, measureLight)
-    
-    
-    
+
+try:
+    client.connect("test.mosquitto.org", aconnect_cb=aconnect_cb)
     
     print("Starting loop")
-
     while(True):
         # Se il Listener rileva un segnale di commutazione, commuto lo stato del led tramite lo switcher
         if modeHandler.en and listener.listen():
-            switcher.switch("Dal Suono")
+            switcher.switch("From Sound")
             
         sleep(cfg.SCAN_PERIOD)
 except Exception as e:

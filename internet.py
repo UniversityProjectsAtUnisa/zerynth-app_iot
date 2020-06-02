@@ -1,4 +1,5 @@
 from lwmqtt import mqtt
+from wireless import wifi
 
 SSID = "Della Rocca"
 PASSWORD = "xDrxQjn7b7"
@@ -9,30 +10,43 @@ def connect():
     
     
     print("Establishing Link...")
-    try:
-        from wireless import wifi
-        wifi.link(SSID, wifi.WIFI_WPA2, PASSWORD)
-    except Exception as e:
-        print("ooops, something wrong while linking :(", e)
-        while True:
-            sleep(1000)
+    while True:
+        try:
+            return wifi.link(SSID, wifi.WIFI_WPA2, PASSWORD)
+        except Exception as e:
+            print("Wifi Linking failed. Attempting to reconnect...")
+        sleep(5000)
+    
     
             
 class Client(mqtt.Client):
-    def breconnect(self):
-        print("Tentativo di riconnessione in corso...")
-
-    def aconnect(self):
-        self.publish("current/connected", "True", qos=1, retain=True)
+        
+    def loop_failure(self):
+        print("Loop Failure!")
+        while True:
+            try:
+                if not wifi.is_linked():
+                    print("WiFi was not linked. Relinking...")
+                    wifi.link(SSID, wifi.WIFI_WPA2, PASSWORD)
+                print("Attempting to reconnect...")
+                self.reconnect()
+                break
+            except Exception as e:
+                pass
+            sleep(5000)
+        return mqtt.RECOVERED
+        
         
     def __init__(self, client_id, clean_session=True):
         mqtt.Client.__init__(self, client_id, clean_session)
         self.set_will("current/connected", "False", qos=1, retain=True)
         
-        for retry in range(10):
+    # Method override
+    def connect(self, host, keepalive=10, breconnect_cb=None, aconnect_cb=None):
+        while True:
             try:
-                self.connect("test.mosquitto.org", 10, breconnect_cb=self.breconnect, aconnect_cb=self.aconnect)
+                mqtt.Client.connect(self, host, keepalive, breconnect_cb=breconnect_cb, aconnect_cb=aconnect_cb, loop_failure=self.loop_failure)
                 break
             except Exception as e:
-                print("connecting...")
-        print("connected.")
+                print("connecting...", e)
+            sleep(5000)
